@@ -27,4 +27,13 @@ export type SubmissionResult = {
   status: string
   createdAt: string
   disclaimer: string
+  reportKind?: string
+}
+
+export type AddressValidation = {
+  valid: boolean
+  normalizedAddress?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  warning?: string | null
 }

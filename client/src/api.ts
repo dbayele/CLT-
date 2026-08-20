@@ -1,4 +1,4 @@
-import type { Draft, Service, SubmissionResult } from './types'
+import type { AddressValidation, Draft, Service, SubmissionResult } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
@@ -6,6 +6,13 @@ export async function getServices(): Promise<Service[]> {
   const response = await fetch(`${API_BASE}/services`)
   if (!response.ok) throw new Error('Unable to load services')
   return response.json()
+}
+
+export async function validateAddress(address: string): Promise<AddressValidation> {
+  const response = await fetch(`${API_BASE}/address/validate?address=${encodeURIComponent(address)}`)
+  const body = await response.json()
+  if (!response.ok) throw new Error(body.error ?? 'Unable to validate address')
+  return body
 }
 
 export async function submitRequest(service: Service, draft: Draft): Promise<SubmissionResult> {
@@ -21,6 +28,17 @@ export async function submitRequest(service: Service, draft: Draft): Promise<Sub
   })
   const body = await response.json()
   if (!response.ok) throw new Error(body.error ?? 'Unable to submit request')
+  return body
+}
+
+export async function submitSupplement(trackingNumber: string, payload: { narrative: string; people?: string; property?: string; vehicles?: string; evidence?: string }) {
+  const response = await fetch(`${API_BASE}/requests/${encodeURIComponent(trackingNumber)}/supplements`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const body = await response.json()
+  if (!response.ok) throw new Error(body.error ?? 'Unable to submit supplement')
   return body
 }
 

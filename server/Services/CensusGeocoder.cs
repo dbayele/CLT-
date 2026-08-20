@@ -27,12 +27,12 @@ public sealed class CensusGeocoder(HttpClient http)
                 match.MatchedAddress?.Contains("CHARLOTTE, NC", StringComparison.OrdinalIgnoreCase) == true;
 
             return new(
-                true,
+                inCharlotteMecklenburg,
                 inCharlotteMecklenburg,
                 match.MatchedAddress,
                 match.Coordinates?.Y,
                 match.Coordinates?.X,
-                inCharlotteMecklenburg ? null : "The address matched, but it appears to be outside Charlotte/Mecklenburg. Confirm the correct law-enforcement jurisdiction.");
+                inCharlotteMecklenburg ? null : "The address matched, but it appears to be outside Charlotte/Mecklenburg and cannot be routed through this CLT++ workflow.");
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {

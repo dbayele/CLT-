@@ -32,6 +32,7 @@ export type SubmissionResult = {
 
 export type AddressValidation = {
   valid: boolean
+  inCharlotteMecklenburg: boolean
   normalizedAddress?: string | null
   latitude?: number | null
   longitude?: number | null

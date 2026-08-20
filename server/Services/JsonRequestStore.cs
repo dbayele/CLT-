@@ -21,8 +21,7 @@ public sealed class JsonRequestStore
         {
             var all = await ReadUnsafeAsync();
             all.Add(request);
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            await File.WriteAllTextAsync(_path, JsonSerializer.Serialize(all, _json));
+            await WriteUnsafeAsync(all);
             return request;
         }
         finally { _gate.Release(); }
@@ -35,11 +34,48 @@ public sealed class JsonRequestStore
         finally { _gate.Release(); }
     }
 
+    public async Task AppendDetailAsync(string trackingNumber, string key, JsonElement value)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            var all = await ReadUnsafeAsync();
+            var request = all.FirstOrDefault(x => string.Equals(x.TrackingNumber, trackingNumber, StringComparison.OrdinalIgnoreCase));
+            if (request is null) return;
+
+            if (request.Details.TryGetValue(key, out var existing) && existing.ValueKind == JsonValueKind.Array)
+            {
+                var items = existing.EnumerateArray().Select(x => x.Clone()).ToList();
+                items.Add(value.Clone());
+                request.Details[key] = ToElement(items);
+            }
+            else
+            {
+                request.Details[key] = ToElement(new[] { value.Clone() });
+            }
+
+            await WriteUnsafeAsync(all);
+        }
+        finally { _gate.Release(); }
+    }
+
     private async Task<List<ServiceRequest>> ReadUnsafeAsync()
     {
         if (!File.Exists(_path)) return new();
         var text = await File.ReadAllTextAsync(_path);
         if (string.IsNullOrWhiteSpace(text)) return new();
         return JsonSerializer.Deserialize<List<ServiceRequest>>(text, _json) ?? new();
+    }
+
+    private async Task WriteUnsafeAsync(List<ServiceRequest> all)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        await File.WriteAllTextAsync(_path, JsonSerializer.Serialize(all, _json));
+    }
+
+    private JsonElement ToElement<T>(T value)
+    {
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(value, _json));
+        return doc.RootElement.Clone();
     }
 }

@@ -4,6 +4,11 @@ using CltPlusPlus.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<JsonRequestStore>();
+builder.Services.AddHttpClient<CensusGeocoder>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(8);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("CLTPlusPlus-Demo/1.0");
+});
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
     policy.AllowAnyHeader().AllowAnyMethod().SetIsOriginAllowed(_ => true)));
 
@@ -27,6 +32,12 @@ app.MapGet("/api/services", (string? category, string? q) =>
     return Results.Ok(services);
 });
 
+app.MapGet("/api/address/validate", async (string address, CensusGeocoder geocoder, CancellationToken cancellationToken) =>
+{
+    var result = await geocoder.ValidateAsync(address, cancellationToken);
+    return Results.Ok(result);
+});
+
 app.MapPost("/api/requests", async (CreateServiceRequest input, JsonRequestStore store) =>
 {
     var service = ServiceCatalog.All.FirstOrDefault(s => s.Id == input.ServiceId);
@@ -39,21 +50,33 @@ app.MapPost("/api/requests", async (CreateServiceRequest input, JsonRequestStore
     {
         if (!details.TryGetValue("emergencyConfirmed", out var gate) || gate.ValueKind != JsonValueKind.True)
             return Results.BadRequest(new { error = "Confirm that this is not an emergency or crime in progress before continuing." });
+        if (!details.TryGetValue("jurisdictionConfirmed", out var jurisdiction) || jurisdiction.ValueKind != JsonValueKind.True)
+            return Results.BadRequest(new { error = "Confirm that the incident location was validated for this demo workflow." });
+        if (!details.TryGetValue("incidentType", out var incidentType) || string.IsNullOrWhiteSpace(incidentType.GetString()))
+            return Results.BadRequest(new { error = "Select an eligible incident type." });
+        if (!details.TryGetValue("narrative", out var narrative) || string.IsNullOrWhiteSpace(narrative.GetString()))
+            return Results.BadRequest(new { error = "Provide an incident narrative." });
+        if (!details.TryGetValue("certified", out var certified) || certified.ValueKind != JsonValueKind.True)
+            return Results.BadRequest(new { error = "Certification is required before submitting the report." });
         if (string.IsNullOrWhiteSpace(contact.Email))
             return Results.BadRequest(new { error = "An email address is required for this demo non-emergency report flow." });
     }
 
     if (service.Id == "crime-tip") contact = contact.WithAnonymousDefault();
 
+    var isCrimeReport = service.Id == "crime-report";
     var request = new ServiceRequest
     {
-        TrackingNumber = $"CLTPP-{DateTime.UtcNow:yyMMdd}-{Random.Shared.Next(100000, 999999)}",
+        TrackingNumber = isCrimeReport
+            ? $"TMP-{DateTime.UtcNow:yyMMdd}-{Random.Shared.Next(100000, 999999)}"
+            : $"CLTPP-{DateTime.UtcNow:yyMMdd}-{Random.Shared.Next(100000, 999999)}",
         ServiceId = service.Id,
         ServiceTitle = service.Title,
         Category = service.Category,
         Location = input.Location?.Trim() ?? string.Empty,
         Details = details,
-        Contact = contact
+        Contact = contact,
+        Status = isCrimeReport ? "Pending review" : "Submitted"
     };
 
     await store.AddAsync(request);
@@ -62,8 +85,32 @@ app.MapPost("/api/requests", async (CreateServiceRequest input, JsonRequestStore
         request.TrackingNumber,
         request.Status,
         request.CreatedAt,
-        disclaimer = "Stored in the CLT++ demo only; not transmitted to CMPD, 311, or Crime Stoppers."
+        reportKind = isCrimeReport ? "temporary" : "service-request",
+        disclaimer = isCrimeReport
+            ? "Temporary CLT++ demo report only; not transmitted to CMPD and not an official police report."
+            : "Stored in the CLT++ demo only; not transmitted to CMPD, Charlotte Fire, 311, or Crime Stoppers."
     });
+});
+
+app.MapPost("/api/requests/{trackingNumber}/supplements", async (string trackingNumber, SupplementalRequest input, JsonRequestStore store) =>
+{
+    var request = await store.FindByTrackingAsync(trackingNumber);
+    if (request is null) return Results.NotFound(new { error = "Report not found." });
+    if (request.ServiceId != "crime-report") return Results.BadRequest(new { error = "Supplements are available only for crime reports." });
+    if (string.IsNullOrWhiteSpace(input.Narrative)) return Results.BadRequest(new { error = "Supplement narrative is required." });
+
+    var supplement = new JsonElementBuilder().Build(new
+    {
+        submittedAt = DateTimeOffset.UtcNow,
+        narrative = input.Narrative.Trim(),
+        people = input.People ?? string.Empty,
+        property = input.Property ?? string.Empty,
+        vehicles = input.Vehicles ?? string.Empty,
+        evidence = input.Evidence ?? string.Empty
+    });
+
+    await store.AppendDetailAsync(request.TrackingNumber, "supplements", supplement);
+    return Results.Ok(new { status = "Supplement received", trackingNumber = request.TrackingNumber });
 });
 
 app.MapGet("/api/requests/{trackingNumber}", async (string trackingNumber, JsonRequestStore store) =>
@@ -73,6 +120,8 @@ app.MapGet("/api/requests/{trackingNumber}", async (string trackingNumber, JsonR
 });
 
 app.Run();
+
+public sealed record SupplementalRequest(string Narrative, string? People, string? Property, string? Vehicles, string? Evidence);
 
 static class ContactExtensions
 {
@@ -84,4 +133,13 @@ static class ContactExtensions
         Phone = contact.Anonymous ? null : contact.Phone,
         PreferredMethod = contact.Anonymous ? null : contact.PreferredMethod
     };
+}
+
+sealed class JsonElementBuilder
+{
+    public JsonElement Build<T>(T value)
+    {
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(value));
+        return doc.RootElement.Clone();
+    }
 }

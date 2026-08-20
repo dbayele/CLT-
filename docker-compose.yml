@@ -1,0 +1,24 @@
+services:
+  api:
+    build: ./server
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      CLTPP_DATA_PATH: /data/requests.json
+    volumes:
+      - cltpp-data:/data
+    ports:
+      - "5080:8080"
+
+  web:
+    build:
+      context: ./client
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_PUBLIC_HOST: cltplusplus.local
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  cltpp-data:

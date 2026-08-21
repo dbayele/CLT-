@@ -44,6 +44,7 @@ PoliceCallIntake.Map(app);
 PoliceCallChimeBridge.Map(app);
 PoliceCallChimeVideo.Map(app);
 InboundChimeIvr.Map(app);
+CentralUserAccess.Map(app);
 
 var users = LoadUsers(app.Configuration, app.Environment);
 
@@ -57,7 +58,7 @@ app.MapGet("/login", (HttpContext ctx, IAntiforgery anti) =>
         <h1>Employee sign in</h1><p>Use your authorized employee account to process requests assigned to your department.</p>
         <form method="post" action="/login">
           <input type="hidden" name="__RequestVerificationToken" value="{H(token)}" />
-          <label>Username<input name="username" autocomplete="username" required /></label>
+          <label>Username or email<input name="username" autocomplete="username" required /></label>
           <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
           <button type="submit">Sign in</button>
         </form>
@@ -76,6 +77,7 @@ app.MapPost("/login", async (HttpContext ctx, IAntiforgery anti) =>
     if (user is null) return Html(Page("Sign in failed", "<main class='login-shell'><section class='login-card'><h1>Sign in failed</h1><p>Invalid username or password.</p><a class='button' href='/login'>Try again</a></section></main>", null), 401);
 
     var claims = new List<Claim> { new(ClaimTypes.Name, user.Username), new(ClaimTypes.Role, user.Role) };
+    if (user.Username.Contains('@')) claims.Add(new Claim(ClaimTypes.Email, user.Username.Trim().ToLowerInvariant()));
     claims.AddRange(user.Departments.Select(d => new Claim(DepartmentAccess.ClaimType, d)));
     var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
     await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
@@ -108,7 +110,8 @@ app.MapGet("/", async (HttpContext ctx, RequestRepository repo, IAntiforgery ant
     var options = string.Join("", departments.Select(d => $"<option value='{H(d)}' {(string.Equals(d,department,StringComparison.OrdinalIgnoreCase)?"selected":"")}>{H(d)}</option>"));
     var isPolice = DepartmentAccess.UserDepartments(ctx.User).Contains("Police", StringComparer.OrdinalIgnoreCase) || ctx.User.IsInRole("Supervisor") || ctx.User.IsInRole("Administrator");
     var detectiveTool = ctx.User.IsInRole("Detective") || ctx.User.IsInRole("Supervisor") || ctx.User.IsInRole("Administrator") ? "<a class='button' href='/investigations'>Investigations</a>" : "";
-    var policeTools = isPolice ? $"<div style='display:flex;gap:.5rem;flex-wrap:wrap'><a class='button' href='/police-calls'>Calls & intake</a><a class='button' href='/inbound-queues'>Inbound Police/EMS/Fire queues</a><a class='button' href='/tow-zones'>Tow zones</a><a class='button' href='/bolos'>BOLOs</a><a class='button' href='/express-reports'>Express reports</a><a class='button' href='/follow-up-meetings/new'>Virtual victim/suspect follow-up</a><a class='button' href='/supplemental-calls'>Recorded supplemental calls</a><a class='button' href='/vehicle-lookup'>Vehicle camera lookup</a><a class='button' href='/identity-verification'>Driver & registration verification</a><a class='button' href='/trespass-records'>Trespass records</a><a class='button' href='/trespass-identity'>Trespass ID & photo</a><a class='button' href='/crash-reports'>DMV-349 crash reports</a>{detectiveTool}<a class='button' href='/swat-requests'>SWAT requests</a><a class='button' href='/vcat-requests'>VCAT requests</a></div>" : "";
+    var adminTool = ctx.User.IsInRole("Administrator") ? "<a class='button' href='/admin/user-access'>User access</a>" : "";
+    var policeTools = isPolice ? $"<div style='display:flex;gap:.5rem;flex-wrap:wrap'><a class='button' href='/police-calls'>Calls & intake</a><a class='button' href='/inbound-queues'>Inbound Police/EMS/Fire queues</a><a class='button' href='/tow-zones'>Tow zones</a><a class='button' href='/bolos'>BOLOs</a><a class='button' href='/express-reports'>Express reports</a><a class='button' href='/follow-up-meetings/new'>Virtual victim/suspect follow-up</a><a class='button' href='/supplemental-calls'>Recorded supplemental calls</a><a class='button' href='/vehicle-lookup'>Vehicle camera lookup</a><a class='button' href='/identity-verification'>Driver & registration verification</a><a class='button' href='/trespass-records'>Trespass records</a><a class='button' href='/trespass-identity'>Trespass ID & photo</a><a class='button' href='/crash-reports'>DMV-349 crash reports</a>{detectiveTool}<a class='button' href='/swat-requests'>SWAT requests</a><a class='button' href='/vcat-requests'>VCAT requests</a>{adminTool}</div>" : adminTool;
     var body = $"""
       <main class="wrap"><section class="page-head"><div><span class="eyebrow">WORK QUEUE</span><h1>Service requests</h1><p>{list.Length} accessible request(s)</p>{policeTools}</div>{Logout(token)}</section>
       <div class="access-strip"><b>{H(ctx.User.Identity?.Name ?? "")}</b><span>{H(string.Join(" · ", DepartmentAccess.UserDepartments(ctx.User)))}</span><strong>{H(ctx.User.FindFirstValue(ClaimTypes.Role) ?? "Employee")}</strong></div>
@@ -179,4 +182,4 @@ static string U(string value) => Uri.EscapeDataString(value);
 static string Pretty(string value) => string.Concat(value.Select((c,i)=>char.IsUpper(c)&&i>0?" "+c:c.ToString())).Replace("_"," ");
 static string StatusOptions(string? selected) => string.Join("", new[]{"Submitted","Pending review","In review","Needs information","Assigned","In progress","Approved","Rejected","Resolved","Closed"}.Select(x=>$"<option {(string.Equals(x,selected,StringComparison.OrdinalIgnoreCase)?"selected":"")}>{H(x)}</option>"));
 static string Logout(string token) => $"<form method='post' action='/logout' class='logout'><input type='hidden' name='__RequestVerificationToken' value='{H(token)}'/><button>Sign out</button></form>";
-static string Page(string title, string body, ClaimsPrincipal? user) => $"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{H(title)} · CLT++ Employee</title><link rel="stylesheet" href="/app.css"></head><body><header class="top"><a href="/" class="brand">CLT<span>++</span> <small>EMPLOYEE</small></a><div>Internal request processing</div></header>{body}<footer>CLT++ employee prototype · Department permissions are enforced server-side.</footer></body></html>""";
+static string Page(string title, string body, ClaimsPrincipal? user) => $"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{H(title)} · CLT++ Employee</title><link rel="stylesheet" href="/app.css"></head><body><header class="top"><a href='/' class="brand">CLT<span>++</span> <small>EMPLOYEE</small></a><div>Internal request processing</div></header>{body}<footer>CLT++ employee prototype · Department permissions are enforced server-side.</footer></body></html>""";

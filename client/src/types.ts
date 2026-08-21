@@ -47,6 +47,21 @@ export type ResidentAccount = {
   homeLongitude?: number | null
 }
 
+export type ResidentVehicle = {
+  id: string
+  licensePlate: string
+  plateState: string
+  year?: string|null
+  make?: string|null
+  model?: string|null
+  bodyType?: string|null
+  color?: string|null
+  vin?: string|null
+  nickname?: string|null
+  createdAt: string
+}
+export type ResidentVehicleInput = Omit<ResidentVehicle,'id'|'createdAt'>
+
 export type AuthProvider = { id: 'Google'|'Microsoft'|'Apple'|'Facebook'; enabled: boolean }
 export type CivicPlace = { name: string; address: string; phone?: string|null; distanceMiles?: number|null; website?: string|null }
 export type RepresentativeInfo = { chamber: string; district?: number|null; name: string; website: string; phone?: string|null }

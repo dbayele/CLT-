@@ -31,6 +31,7 @@ TowZoneAdmin.Map(app);
 BoloAdmin.Map(app);
 ExpressReports.Map(app);
 VehicleCameraLookup.Map(app);
+DriverVehicleVerification.Map(app);
 
 var users = LoadUsers(app.Configuration, app.Environment);
 
@@ -94,7 +95,7 @@ app.MapGet("/", async (HttpContext ctx, RequestRepository repo, IAntiforgery ant
     """));
     var options = string.Join("", departments.Select(d => $"<option value='{H(d)}' {(string.Equals(d,department,StringComparison.OrdinalIgnoreCase)?"selected":"")}>{H(d)}</option>"));
     var isPolice = DepartmentAccess.UserDepartments(ctx.User).Contains("Police", StringComparer.OrdinalIgnoreCase) || ctx.User.IsInRole("Supervisor") || ctx.User.IsInRole("Administrator");
-    var policeTools = isPolice ? "<div style='display:flex;gap:.5rem;flex-wrap:wrap'><a class='button' href='/tow-zones'>Tow zones</a><a class='button' href='/bolos'>BOLOs</a><a class='button' href='/express-reports'>Express reports</a><a class='button' href='/vehicle-lookup'>Vehicle camera lookup</a></div>" : "";
+    var policeTools = isPolice ? "<div style='display:flex;gap:.5rem;flex-wrap:wrap'><a class='button' href='/tow-zones'>Tow zones</a><a class='button' href='/bolos'>BOLOs</a><a class='button' href='/express-reports'>Express reports</a><a class='button' href='/vehicle-lookup'>Vehicle camera lookup</a><a class='button' href='/identity-verification'>Driver & registration verification</a></div>" : "";
     var body = $"""
       <main class="wrap"><section class="page-head"><div><span class="eyebrow">WORK QUEUE</span><h1>Service requests</h1><p>{list.Length} accessible request(s)</p>{policeTools}</div>{Logout(token)}</section>
       <div class="access-strip"><b>{H(ctx.User.Identity?.Name ?? "")}</b><span>{H(string.Join(" · ", DepartmentAccess.UserDepartments(ctx.User)))}</span><strong>{H(ctx.User.FindFirstValue(ClaimTypes.Role) ?? "Employee")}</strong></div>

@@ -11,6 +11,8 @@ public sealed class PublicSafetyDataContext : DbContext
 
     public DbSet<TowingRequest> TowingRequests => Set<TowingRequest>();
     public DbSet<TowRelease> TowReleases => Set<TowRelease>();
+    public DbSet<TowZone> TowZones => Set<TowZone>();
+    public DbSet<ZoneWreckerCompany> ZoneWreckerCompanies => Set<ZoneWreckerCompany>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -35,6 +37,28 @@ public sealed class PublicSafetyDataContext : DbContext
             entity.HasIndex(x => x.ResidentUserId);
             entity.Property(x => x.AuthorizedBy).HasMaxLength(160).IsRequired();
             entity.Property(x => x.ReleasedToName).HasMaxLength(160).IsRequired();
+        });
+
+        builder.Entity<ZoneWreckerCompany>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CompanyName).HasMaxLength(180).IsRequired();
+            entity.Property(x => x.ContactName).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.ContactEmail).HasMaxLength(254).IsRequired();
+            entity.Property(x => x.ContactPhone).HasMaxLength(40).IsRequired();
+            entity.HasIndex(x => x.CompanyName);
+        });
+
+        builder.Entity<TowZone>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.HasIndex(x => x.Name).IsUnique();
+            entity.HasIndex(x => x.DefaultTowCompanyId);
+            entity.HasOne<ZoneWreckerCompany>()
+                .WithMany()
+                .HasForeignKey(x => x.DefaultTowCompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

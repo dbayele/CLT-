@@ -5,8 +5,8 @@ using Microsoft.EntityFrameworkCore;
 namespace CltPlusPlus.Api.Services;
 
 // Civic/non-public-safety database: identity, resident profile data, saved vehicles,
-// business accounts and permit applications. Public-safety application records live
-// in PublicSafetyDataContext and reference civic identities only by stable IDs.
+// business accounts, permit applications, and rental-property registrations. Public-safety
+// application records live in PublicSafetyDataContext and reference civic identities only by stable IDs.
 public sealed class ResidentDataContext : IdentityDbContext<ResidentUser>
 {
     public ResidentDataContext(DbContextOptions<ResidentDataContext> options) : base(options) { }
@@ -14,6 +14,7 @@ public sealed class ResidentDataContext : IdentityDbContext<ResidentUser>
     public DbSet<ResidentVehicle> ResidentVehicles => Set<ResidentVehicle>();
     public DbSet<BusinessAccount> BusinessAccounts => Set<BusinessAccount>();
     public DbSet<BusinessPermitApplication> BusinessPermitApplications => Set<BusinessPermitApplication>();
+    public DbSet<RentalPropertyRegistration> RentalPropertyRegistrations => Set<RentalPropertyRegistration>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -45,6 +46,19 @@ public sealed class ResidentDataContext : IdentityDbContext<ResidentUser>
             entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
             entity.HasOne<BusinessAccount>().WithMany().HasForeignKey(x => x.BusinessAccountId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ResidentUser>().WithMany().HasForeignKey(x => x.ResidentUserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<RentalPropertyRegistration>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.TrackingNumber).IsUnique();
+            entity.Property(x => x.ApplicantType).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.PropertyAddress).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.OwnerName).HasMaxLength(180).IsRequired();
+            entity.Property(x => x.OwnerEmail).HasMaxLength(254).IsRequired();
+            entity.Property(x => x.OwnerPhone).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
+            entity.HasOne<ResidentUser>().WithMany().HasForeignKey(x => x.ResidentUserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<BusinessAccount>().WithMany().HasForeignKey(x => x.BusinessAccountId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

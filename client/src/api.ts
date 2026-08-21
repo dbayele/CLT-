@@ -1,4 +1,4 @@
-import type { AddressValidation, AuthProvider, CivicProfile, Draft, ResidentAccount, Service, SubmissionResult } from './types'
+import type { AddressValidation, AuthProvider, CivicProfile, Draft, ResidentAccount, ResidentVehicle, ResidentVehicleInput, Service, SubmissionResult } from './types'
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 const jsonHeaders = { 'Content-Type': 'application/json' }
@@ -36,3 +36,7 @@ export async function saveHomeAddress(address:string):Promise<ResidentAccount> {
   return body(await fetch(`${API_BASE}/account/address`,{method:'PUT',headers:jsonHeaders,credentials,body:JSON.stringify({address})}))
 }
 export async function getCivicProfile():Promise<CivicProfile> { return body(await fetch(`${API_BASE}/account/civic-profile`,{credentials})) }
+export async function getResidentVehicles():Promise<ResidentVehicle[]> { return body(await fetch(`${API_BASE}/account/vehicles`,{credentials})) }
+export async function createResidentVehicle(input:ResidentVehicleInput):Promise<ResidentVehicle> { return body(await fetch(`${API_BASE}/account/vehicles`,{method:'POST',headers:jsonHeaders,credentials,body:JSON.stringify(input)})) }
+export async function updateResidentVehicle(id:string,input:ResidentVehicleInput):Promise<ResidentVehicle> { return body(await fetch(`${API_BASE}/account/vehicles/${encodeURIComponent(id)}`,{method:'PUT',headers:jsonHeaders,credentials,body:JSON.stringify(input)})) }
+export async function deleteResidentVehicle(id:string){ const r=await fetch(`${API_BASE}/account/vehicles/${encodeURIComponent(id)}`,{method:'DELETE',credentials}); if(!r.ok)throw new Error('Unable to delete vehicle') }

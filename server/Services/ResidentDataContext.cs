@@ -4,13 +4,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CltPlusPlus.Api.Services;
 
+// Civic/non-public-safety database: identity, resident profile data, saved vehicles,
+// business accounts and permit applications. Public-safety application records live
+// in PublicSafetyDataContext and reference civic identities only by stable IDs.
 public sealed class ResidentDataContext : IdentityDbContext<ResidentUser>
 {
     public ResidentDataContext(DbContextOptions<ResidentDataContext> options) : base(options) { }
 
     public DbSet<ResidentVehicle> ResidentVehicles => Set<ResidentVehicle>();
     public DbSet<BusinessAccount> BusinessAccounts => Set<BusinessAccount>();
-    public DbSet<TowingRequest> TowingRequests => Set<TowingRequest>();
     public DbSet<BusinessPermitApplication> BusinessPermitApplications => Set<BusinessPermitApplication>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -32,17 +34,6 @@ public sealed class ResidentDataContext : IdentityDbContext<ResidentUser>
             entity.Property(x => x.LegalName).HasMaxLength(160).IsRequired();
             entity.Property(x => x.Email).HasMaxLength(254).IsRequired();
             entity.HasOne<ResidentUser>().WithOne().HasForeignKey<BusinessAccount>(x => x.ResidentUserId).OnDelete(DeleteBehavior.Cascade);
-        });
-        builder.Entity<TowingRequest>(entity =>
-        {
-            entity.HasKey(x => x.Id);
-            entity.HasIndex(x => x.TrackingNumber).IsUnique();
-            entity.Property(x => x.RequestType).HasMaxLength(30).IsRequired();
-            entity.Property(x => x.LicensePlate).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.PlateState).HasMaxLength(3).IsRequired();
-            entity.Property(x => x.Vin).HasMaxLength(17).IsRequired();
-            entity.HasOne<BusinessAccount>().WithMany().HasForeignKey(x => x.BusinessAccountId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<ResidentUser>().WithMany().HasForeignKey(x => x.ResidentUserId).OnDelete(DeleteBehavior.Cascade);
         });
         builder.Entity<BusinessPermitApplication>(entity =>
         {

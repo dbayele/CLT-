@@ -48,6 +48,7 @@ CentralUserAccess.Map(app);
 OfficerDutyStatus.Map(app);
 PoliceCallAssignments.Map(app);
 PublicSafetyAlerts.Map(app);
+AnimalCareShelter.Map(app);
 
 var users = LoadUsers(app.Configuration, app.Environment);
 
@@ -111,14 +112,17 @@ app.MapGet("/", async (HttpContext ctx, RequestRepository repo, IAntiforgery ant
       <tr><td><a href="/requests/{U(r.TrackingNumber)}"><b>{H(r.TrackingNumber)}</b></a><small>{H(r.ServiceTitle)}</small></td><td>{H(DepartmentAccess.For(r))}</td><td>{H(r.Location)}</td><td><span class="status">{H(r.Status)}</span></td><td>{H(r.Processing?.AssignedTo ?? "Unassigned")}</td><td>{r.CreatedAt.LocalDateTime:g}</td></tr>
     """));
     var options = string.Join("", departments.Select(d => $"<option value='{H(d)}' {(string.Equals(d,department,StringComparison.OrdinalIgnoreCase)?"selected":"")}>{H(d)}</option>"));
-    var isPolice = DepartmentAccess.UserDepartments(ctx.User).Contains("Police", StringComparer.OrdinalIgnoreCase) || ctx.User.IsInRole("Supervisor") || ctx.User.IsInRole("Administrator");
+    var userDepartments = DepartmentAccess.UserDepartments(ctx.User);
+    var isPolice = userDepartments.Contains("Police", StringComparer.OrdinalIgnoreCase) || ctx.User.IsInRole("Supervisor") || ctx.User.IsInRole("Administrator");
+    var isAnimalCare = userDepartments.Contains("Animal Care & Control", StringComparer.OrdinalIgnoreCase) || ctx.User.IsInRole("Supervisor") || ctx.User.IsInRole("Administrator");
     var detectiveTool = ctx.User.IsInRole("Detective") || ctx.User.IsInRole("Supervisor") || ctx.User.IsInRole("Administrator") ? "<a class='button' href='/investigations'>Investigations</a>" : "";
     var adminTool = ctx.User.IsInRole("Administrator") ? "<a class='button' href='/admin/user-access'>User access</a>" : "";
     var dutyApprovalTool = ctx.User.IsInRole("Supervisor") || ctx.User.IsInRole("Administrator") ? "<a class='button' href='/officer-status/approvals'>Duty approvals</a>" : "";
     var policeTools = isPolice ? $"<div style='display:flex;gap:.5rem;flex-wrap:wrap'><a class='button' href='/officer-status'>My duty status</a><a class='button' href='/my-call-queue'>My call queue</a><a class='button' href='/police-call-assignment'>Assign calls</a>{dutyApprovalTool}<a class='button' href='/police-calls'>Calls & intake</a><a class='button' href='/public-safety-alerts'>Public safety alerts</a><a class='button' href='/inbound-queues'>Inbound Police/EMS/Fire queues</a><a class='button' href='/tow-zones'>Tow zones</a><a class='button' href='/bolos'>BOLOs</a><a class='button' href='/express-reports'>Express reports</a><a class='button' href='/follow-up-meetings/new'>Virtual victim/suspect follow-up</a><a class='button' href='/supplemental-calls'>Recorded supplemental calls</a><a class='button' href='/vehicle-lookup'>Vehicle camera lookup</a><a class='button' href='/identity-verification'>Driver & registration verification</a><a class='button' href='/trespass-records'>Trespass records</a><a class='button' href='/trespass-identity'>Trespass ID & photo</a><a class='button' href='/crash-reports'>DMV-349 crash reports</a>{detectiveTool}<a class='button' href='/swat-requests'>SWAT requests</a><a class='button' href='/vcat-requests'>VCAT requests</a>{adminTool}</div>" : adminTool;
+    var animalCareTools = isAnimalCare ? "<div style='display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem'><a class='button' href='/animal-care'>Animal Care shelter</a><a class='button' href='/animal-care/spaces'>Shelter spaces</a><a class='button' href='/animal-care/animals'>Animals in custody</a><a class='button' href='/animal-care/adoptions'>Adoption requests</a></div>" : "";
     var body = $"""
-      <main class="wrap"><section class="page-head"><div><span class="eyebrow">WORK QUEUE</span><h1>Service requests</h1><p>{list.Length} accessible request(s)</p>{policeTools}</div>{Logout(token)}</section>
-      <div class="access-strip"><b>{H(ctx.User.Identity?.Name ?? "")}</b><span>{H(string.Join(" · ", DepartmentAccess.UserDepartments(ctx.User)))}</span><strong>{H(ctx.User.FindFirstValue(ClaimTypes.Role) ?? "Employee")}</strong></div>
+      <main class="wrap"><section class="page-head"><div><span class="eyebrow">WORK QUEUE</span><h1>Service requests</h1><p>{list.Length} accessible request(s)</p>{policeTools}{animalCareTools}</div>{Logout(token)}</section>
+      <div class="access-strip"><b>{H(ctx.User.Identity?.Name ?? "")}</b><span>{H(string.Join(" · ", userDepartments))}</span><strong>{H(ctx.User.FindFirstValue(ClaimTypes.Role) ?? "Employee")}</strong></div>
       <form class="filters" method="get"><input name="q" value="{H(q ?? "")}" placeholder="Tracking number, service or address"/><select name="department"><option value="">All permitted departments</option>{options}</select><select name="status"><option value="">All statuses</option>{StatusOptions(status)}</select><button>Filter</button></form>
       <section class="table-card"><table><thead><tr><th>Request</th><th>Department</th><th>Location</th><th>Status</th><th>Assigned</th><th>Created</th></tr></thead><tbody>{(rows.Length>0?rows:"<tr><td colspan='6' class='empty'>No requests match this queue.</td></tr>")}</tbody></table></section></main>
     """;

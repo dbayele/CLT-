@@ -14,6 +14,7 @@ public static class DriverVehicleVerification
     public static void Map(WebApplication app)
     {
         EnsureSchema(app.Configuration);
+        WarrantQueue.Map(app);
 
         app.MapGet("/identity-verification", (HttpContext ctx, IAntiforgery anti) =>
         {

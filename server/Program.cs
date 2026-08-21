@@ -81,7 +81,6 @@ app.UseAuthorization();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok", product = "CLT++", unofficial = true }));
 
-// Resident account endpoints.
 app.MapPost("/api/account/register", async (RegisterResident input, UserManager<ResidentUser> users, SignInManager<ResidentUser> signIn) =>
 {
     var email = input.Email.Trim().ToLowerInvariant();
@@ -185,6 +184,79 @@ app.MapGet("/api/account/civic-profile", async (ClaimsPrincipal principal, UserM
     return profile is null ? Results.BadRequest(new { error = "Unable to build a civic profile for this address." }) : Results.Ok(profile);
 });
 
+app.MapGet("/api/account/vehicles", async (ClaimsPrincipal principal, UserManager<ResidentUser> users, ResidentDataContext db) =>
+{
+    if (principal.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    var user = await users.GetUserAsync(principal);
+    if (user is null) return Results.Unauthorized();
+    var vehicles = await db.ResidentVehicles.Where(v => v.ResidentUserId == user.Id).OrderBy(v => v.Nickname ?? v.LicensePlate).ToListAsync();
+    return Results.Ok(vehicles);
+});
+
+app.MapPost("/api/account/vehicles", async (ResidentVehicleInput input, ClaimsPrincipal principal, UserManager<ResidentUser> users, ResidentDataContext db) =>
+{
+    if (principal.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    var user = await users.GetUserAsync(principal);
+    if (user is null) return Results.Unauthorized();
+    var plate = NormalizePlate(input.LicensePlate);
+    var state = NormalizeState(input.PlateState);
+    if (string.IsNullOrWhiteSpace(plate)) return Results.BadRequest(new { error = "License plate is required." });
+    if (await db.ResidentVehicles.AnyAsync(v => v.ResidentUserId == user.Id && v.PlateState == state && v.LicensePlate == plate))
+        return Results.BadRequest(new { error = "That license plate is already saved to your account." });
+    var vehicle = new ResidentVehicle
+    {
+        ResidentUserId = user.Id,
+        LicensePlate = plate,
+        PlateState = state,
+        Year = Clean(input.Year, 4),
+        Make = Clean(input.Make, 50),
+        Model = Clean(input.Model, 50),
+        BodyType = Clean(input.BodyType, 40),
+        Color = Clean(input.Color, 30),
+        Vin = Clean(input.Vin, 17)?.ToUpperInvariant(),
+        Nickname = Clean(input.Nickname, 50)
+    };
+    db.ResidentVehicles.Add(vehicle);
+    await db.SaveChangesAsync();
+    return Results.Created($"/api/account/vehicles/{vehicle.Id}", vehicle);
+});
+
+app.MapPut("/api/account/vehicles/{id:guid}", async (Guid id, ResidentVehicleInput input, ClaimsPrincipal principal, UserManager<ResidentUser> users, ResidentDataContext db) =>
+{
+    if (principal.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    var user = await users.GetUserAsync(principal);
+    if (user is null) return Results.Unauthorized();
+    var vehicle = await db.ResidentVehicles.FirstOrDefaultAsync(v => v.Id == id && v.ResidentUserId == user.Id);
+    if (vehicle is null) return Results.NotFound();
+    var plate = NormalizePlate(input.LicensePlate);
+    var state = NormalizeState(input.PlateState);
+    if (await db.ResidentVehicles.AnyAsync(v => v.Id != id && v.ResidentUserId == user.Id && v.PlateState == state && v.LicensePlate == plate))
+        return Results.BadRequest(new { error = "That license plate is already saved to your account." });
+    vehicle.LicensePlate = plate;
+    vehicle.PlateState = state;
+    vehicle.Year = Clean(input.Year, 4);
+    vehicle.Make = Clean(input.Make, 50);
+    vehicle.Model = Clean(input.Model, 50);
+    vehicle.BodyType = Clean(input.BodyType, 40);
+    vehicle.Color = Clean(input.Color, 30);
+    vehicle.Vin = Clean(input.Vin, 17)?.ToUpperInvariant();
+    vehicle.Nickname = Clean(input.Nickname, 50);
+    await db.SaveChangesAsync();
+    return Results.Ok(vehicle);
+});
+
+app.MapDelete("/api/account/vehicles/{id:guid}", async (Guid id, ClaimsPrincipal principal, UserManager<ResidentUser> users, ResidentDataContext db) =>
+{
+    if (principal.Identity?.IsAuthenticated != true) return Results.Unauthorized();
+    var user = await users.GetUserAsync(principal);
+    if (user is null) return Results.Unauthorized();
+    var vehicle = await db.ResidentVehicles.FirstOrDefaultAsync(v => v.Id == id && v.ResidentUserId == user.Id);
+    if (vehicle is null) return Results.NotFound();
+    db.ResidentVehicles.Remove(vehicle);
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+});
+
 app.MapGet("/api/services", (string? category, string? q) =>
 {
     IEnumerable<ServiceDefinition> services = ServiceCatalog.All;
@@ -251,6 +323,9 @@ app.Run();
 
 bool HasConfig(string key1, string key2) => !string.IsNullOrWhiteSpace(builder.Configuration[key1]) && !string.IsNullOrWhiteSpace(builder.Configuration[key2]);
 static object AccountView(ResidentUser u) => new { u.Email, u.DisplayName, u.HomeAddress, u.HomeLatitude, u.HomeLongitude };
+static string NormalizePlate(string? value) => new string((value ?? "").Trim().ToUpperInvariant().Where(c => char.IsLetterOrDigit(c) || c == '-').ToArray());
+static string NormalizeState(string? value) => string.IsNullOrWhiteSpace(value) ? "NC" : new string(value.Trim().ToUpperInvariant().Where(char.IsLetter).Take(3).ToArray());
+static string? Clean(string? value, int max) { var s = value?.Trim(); return string.IsNullOrWhiteSpace(s) ? null : s[..Math.Min(s.Length, max)]; }
 public sealed record LoginRequest(string Email, string Password);
 public sealed record SupplementalRequest(string Narrative, string? People, string? Property, string? Vehicles, string? Evidence);
 

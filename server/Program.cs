@@ -3,12 +3,9 @@ using System.Text.Json;
 using CltPlusPlus.Api;
 using CltPlusPlus.Api.Models;
 using CltPlusPlus.Api.Services;
-<<<<<<< HEAD
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-=======
 using Stripe;
->>>>>>> origin/main
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<JsonRequestStore>();
@@ -83,8 +80,7 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
-<<<<<<< HEAD
-app.MapGet("/api/health", () => Results.Ok(new { status = "ok", product = "CLT++", unofficial = true, database = DatabaseRuntime.Describe(builder.Environment, builder.Configuration) }));
+app.MapGet("/api/health", (StripePaymentService payments) => Results.Ok(new { status = "ok", product = "CLT++", unofficial = true, database = DatabaseRuntime.Describe(builder.Environment, builder.Configuration), stripe = payments.Enabled ? "configured" : "not-configured" }));
 
 app.MapPost("/api/account/register", async (RegisterResident input, UserManager<ResidentUser> users, SignInManager<ResidentUser> signIn) =>
 {
@@ -261,15 +257,6 @@ app.MapDelete("/api/account/vehicles/{id:guid}", async (Guid id, ClaimsPrincipal
     await db.SaveChangesAsync();
     return Results.NoContent();
 });
-=======
-app.MapGet("/api/health", (StripePaymentService payments) => Results.Ok(new
-{
-    status = "ok",
-    product = "CLT++",
-    unofficial = true,
-    stripe = payments.Enabled ? "configured" : "not-configured"
-}));
->>>>>>> origin/main
 
 app.MapGet("/api/services", (string? category, string? q) =>
 {

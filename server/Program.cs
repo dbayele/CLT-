@@ -3,11 +3,16 @@ using System.Text.Json;
 using CltPlusPlus.Api;
 using CltPlusPlus.Api.Models;
 using CltPlusPlus.Api.Services;
+<<<<<<< HEAD
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+=======
+using Stripe;
+>>>>>>> origin/main
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<JsonRequestStore>();
+builder.Services.AddSingleton<StripePaymentService>();
 builder.Services.AddHttpClient<CensusGeocoder>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(8);
@@ -78,6 +83,7 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
+<<<<<<< HEAD
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok", product = "CLT++", unofficial = true, database = DatabaseRuntime.Describe(builder.Environment, builder.Configuration) }));
 
 app.MapPost("/api/account/register", async (RegisterResident input, UserManager<ResidentUser> users, SignInManager<ResidentUser> signIn) =>
@@ -255,6 +261,15 @@ app.MapDelete("/api/account/vehicles/{id:guid}", async (Guid id, ClaimsPrincipal
     await db.SaveChangesAsync();
     return Results.NoContent();
 });
+=======
+app.MapGet("/api/health", (StripePaymentService payments) => Results.Ok(new
+{
+    status = "ok",
+    product = "CLT++",
+    unofficial = true,
+    stripe = payments.Enabled ? "configured" : "not-configured"
+}));
+>>>>>>> origin/main
 
 app.MapGet("/api/services", (string? category, string? q) =>
 {
@@ -301,6 +316,59 @@ app.MapPost("/api/requests", async (CreateServiceRequest input, JsonRequestStore
     });
 });
 
+app.MapPost("/api/requests/{trackingNumber}/payments/checkout", async (
+    string trackingNumber,
+    JsonRequestStore store,
+    StripePaymentService payments,
+    CancellationToken cancellationToken) =>
+{
+    var request = await store.FindByTrackingAsync(trackingNumber);
+    if (request is null) return Results.NotFound(new { error = "Request not found." });
+    if (!payments.Enabled) return Results.Problem("Stripe is not configured on this server.", statusCode: StatusCodes.Status503ServiceUnavailable);
+
+    try
+    {
+        var checkout = await payments.CreateCheckoutAsync(request, cancellationToken);
+        return Results.Ok(checkout);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/requests/{trackingNumber}/payments", async (
+    string trackingNumber,
+    JsonRequestStore store,
+    StripePaymentService payments) =>
+{
+    var request = await store.FindByTrackingAsync(trackingNumber);
+    if (request is null) return Results.NotFound(new { error = "Request not found." });
+    return Results.Ok(payments.GetSummary(request.ServiceId, request.TrackingNumber));
+});
+
+app.MapPost("/api/payments/stripe/webhook", async (HttpRequest request, StripePaymentService payments) =>
+{
+    using var reader = new StreamReader(request.Body);
+    var body = await reader.ReadToEndAsync();
+    var signature = request.Headers["Stripe-Signature"].ToString();
+    if (string.IsNullOrWhiteSpace(signature)) return Results.BadRequest(new { error = "Missing Stripe signature." });
+
+    try
+    {
+        await payments.ProcessWebhookAsync(body, signature);
+        return Results.Ok();
+    }
+    catch (StripeException)
+    {
+        return Results.BadRequest(new { error = "Invalid Stripe webhook signature or event." });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Problem(ex.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+});
+
 app.MapPost("/api/requests/{trackingNumber}/supplements", async (string trackingNumber, SupplementalRequest input, JsonRequestStore store) =>
 {
     var request = await store.FindByTrackingAsync(trackingNumber);
@@ -312,10 +380,24 @@ app.MapPost("/api/requests/{trackingNumber}/supplements", async (string tracking
     return Results.Ok(new { status = "Supplement received", trackingNumber = request.TrackingNumber });
 });
 
-app.MapGet("/api/requests/{trackingNumber}", async (string trackingNumber, JsonRequestStore store) =>
+app.MapGet("/api/requests/{trackingNumber}", async (string trackingNumber, JsonRequestStore store, StripePaymentService payments) =>
 {
     var request = await store.FindByTrackingAsync(trackingNumber);
-    return request is null ? Results.NotFound(new { error = "Request not found." }) : Results.Ok(request);
+    if (request is null) return Results.NotFound(new { error = "Request not found." });
+    return Results.Ok(new
+    {
+        request.Id,
+        request.TrackingNumber,
+        request.ServiceId,
+        request.ServiceTitle,
+        request.Category,
+        request.Location,
+        request.Details,
+        request.Contact,
+        request.CreatedAt,
+        request.Status,
+        payment = payments.GetSummary(request.ServiceId, request.TrackingNumber)
+    });
 });
 
 app.Run();

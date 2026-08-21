@@ -23,6 +23,7 @@ export async function trackRequest(trackingNumber: string) { return body<any>(aw
 export async function registerResident(email:string,password:string,displayName?:string):Promise<ResidentAccount> {
   return body(await fetch(`${API_BASE}/account/register`, {method:'POST',headers:jsonHeaders,credentials,body:JSON.stringify({email,password,displayName})}))
 }
+<<<<<<< HEAD
 export async function loginResident(email:string,password:string):Promise<ResidentAccount> {
   return body(await fetch(`${API_BASE}/account/login`, {method:'POST',headers:jsonHeaders,credentials,body:JSON.stringify({email,password})}))
 }
@@ -40,3 +41,12 @@ export async function getResidentVehicles():Promise<ResidentVehicle[]> { return 
 export async function createResidentVehicle(input:ResidentVehicleInput):Promise<ResidentVehicle> { return body(await fetch(`${API_BASE}/account/vehicles`,{method:'POST',headers:jsonHeaders,credentials,body:JSON.stringify(input)})) }
 export async function updateResidentVehicle(id:string,input:ResidentVehicleInput):Promise<ResidentVehicle> { return body(await fetch(`${API_BASE}/account/vehicles/${encodeURIComponent(id)}`,{method:'PUT',headers:jsonHeaders,credentials,body:JSON.stringify(input)})) }
 export async function deleteResidentVehicle(id:string){ const r=await fetch(`${API_BASE}/account/vehicles/${encodeURIComponent(id)}`,{method:'DELETE',credentials}); if(!r.ok)throw new Error('Unable to delete vehicle') }
+=======
+
+export async function createCheckout(trackingNumber: string): Promise<{ url: string; amount: number; currency: string; status: string }> {
+  const response = await fetch(`${API_BASE}/requests/${encodeURIComponent(trackingNumber)}/payments/checkout`, { method: 'POST' })
+  const body = await response.json()
+  if (!response.ok) throw new Error(body.error ?? body.detail ?? 'Unable to start payment')
+  return body
+}
+>>>>>>> origin/main

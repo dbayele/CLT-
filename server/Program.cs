@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using CltPlusPlus.Api;
 using CltPlusPlus.Api.Models;
 using CltPlusPlus.Api.Services;
 using Microsoft.AspNetCore.Identity;
@@ -18,9 +19,7 @@ builder.Services.AddHttpClient<CivicProfileService>(client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("CLTPlusPlus-Demo/1.0");
 });
 
-var residentDb = builder.Configuration["CLTPP_RESIDENT_DB"] ?? Path.Combine(AppContext.BaseDirectory, "data", "residents.db");
-Directory.CreateDirectory(Path.GetDirectoryName(residentDb)!);
-builder.Services.AddDbContext<ResidentDataContext>(o => o.UseSqlite($"Data Source={residentDb}"));
+builder.Services.AddDbContext<ResidentDataContext>(o => DatabaseRuntime.ConfigureResidentDatabase(o, builder.Environment, builder.Configuration));
 builder.Services.AddIdentity<ResidentUser, IdentityRole>(o =>
 {
     o.User.RequireUniqueEmail = true;
@@ -79,7 +78,7 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/api/health", () => Results.Ok(new { status = "ok", product = "CLT++", unofficial = true }));
+app.MapGet("/api/health", () => Results.Ok(new { status = "ok", product = "CLT++", unofficial = true, database = DatabaseRuntime.Describe(builder.Environment, builder.Configuration) }));
 
 app.MapPost("/api/account/register", async (RegisterResident input, UserManager<ResidentUser> users, SignInManager<ResidentUser> signIn) =>
 {

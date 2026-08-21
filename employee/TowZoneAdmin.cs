@@ -8,6 +8,7 @@ public static class TowZoneAdmin
 {
     public static void Map(WebApplication app)
     {
+        IncidentNarrativeAdmin.Map(app);
         app.MapGet("/tow-zones", async (HttpContext ctx) =>
         {
             if (!CanManageTowZones(ctx.User)) return Results.Forbid();

@@ -5,4 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>CltPlusPlus.Api</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Stripe.net" Version="52.3.0" />
+  </ItemGroup>
 </Project>

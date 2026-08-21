@@ -3,14 +3,10 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>CltPlusPlus.Employee</RootNamespace>
+    <RootNamespace>CltPlusPlus.Partners</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
     <PackageReference Include="Npgsql" Version="8.0.4" />
-    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="4.0.100.7" />
-    <PackageReference Include="AWSSDK.SimpleEmailV2" Version="4.0.102.1" />
-    <PackageReference Include="TesseractOCR" Version="5.5.2" />
   </ItemGroup>
 </Project>

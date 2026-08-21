@@ -1,0 +1,64 @@
+using System.Net;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.Data.Sqlite;
+
+namespace CltPlusPlus.Employee;
+
+public static class OfficerDutyStatus
+{
+    private static readonly string[] OperationalStatuses = ["Available", "En route", "On scene", "Unavailable"];
+
+    public static void Map(WebApplication app)
+    {
+        var dbPath = app.Configuration["CLTPP_PUBLIC_SAFETY_DB"] ?? Path.Combine(AppContext.BaseDirectory, "data", "public-safety.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!); Ensure(dbPath);
+
+        app.MapGet("/officer-status", async (HttpContext ctx, IAntiforgery anti) =>
+        {
+            if (!CanPolice(ctx.User)) return Results.Forbid();
+            var officer = OfficerKey(ctx.User); var current = await Load(dbPath, officer); var token = anti.GetAndStoreTokens(ctx).RequestToken!;
+            var pending = await PendingForOfficer(dbPath, officer); var history = await History(dbPath, officer); var onDuty = current?.OnDuty == true;
+            var buttons = string.Join("", OperationalStatuses.Select(s => $"<button name='operationalStatus' value='{H(s)}' {(onDuty ? "" : "disabled")}>{H(s)}</button>"));
+            return Html(Page("Officer status", $"""<main class='wrap'><section class='page-head'><div><span class='eyebrow'>POLICE · OFFICER STATUS</span><h1>Duty & availability</h1><p>{H(officer)}</p></div><a class='button' href='/'>Employee home</a></section><div class='detail-grid'><section class='card'><h2>Current status</h2><dl><dt>Duty state</dt><dd><b>{(onDuty?"On duty":"Off duty")}</b></dd><dt>Operational status</dt><dd>{H(current?.OperationalStatus??"—")}</dd><dt>Pending duty request</dt><dd>{H(pending??"None")}</dd></dl><h2>Request duty change</h2><p>A police supervisor must approve duty-state changes.</p><form method='post' action='/officer-status/duty-request'><input type='hidden' name='__RequestVerificationToken' value='{H(token)}'/><button name='requestedOnDuty' value='true'>Request On Duty</button><button name='requestedOnDuty' value='false'>Request Off Duty</button></form><hr/><h2>Operational status</h2><p>Available only while your approved duty state is On Duty.</p><form method='post' action='/officer-status/operational'><input type='hidden' name='__RequestVerificationToken' value='{H(token)}'/><div style='display:flex;gap:.5rem;flex-wrap:wrap'>{buttons}</div></form></section><aside class='card'><h2>Status history</h2>{history}</aside></div></main>"""));
+        }).RequireAuthorization();
+
+        app.MapPost("/officer-status/duty-request", async (HttpContext ctx, IAntiforgery anti) =>
+        {
+            if (!CanPolice(ctx.User)) return Results.Forbid(); await anti.ValidateRequestAsync(ctx); var f = await ctx.Request.ReadFormAsync();
+            var requested = string.Equals(f["requestedOnDuty"], "true", StringComparison.OrdinalIgnoreCase); var officer = OfficerKey(ctx.User); var now = Now();
+            await Exec(dbPath,"UPDATE OfficerDutyRequests SET Status='Superseded',ReviewedAt=$t,ReviewedBy=$o WHERE OfficerKey=$o AND Status='Pending'",("$t",now),("$o",officer));
+            await Exec(dbPath,"INSERT INTO OfficerDutyRequests(Id,OfficerKey,RequestedOnDuty,Status,RequestedAt) VALUES($i,$o,$d,'Pending',$t)",("$i",Guid.NewGuid()),("$o",officer),("$d",requested?1:0),("$t",now));
+            await Audit(dbPath,officer,requested?"Requested On duty":"Requested Off duty",null,officer,now); return Results.Redirect("/officer-status");
+        }).RequireAuthorization();
+
+        app.MapGet("/officer-status/approvals", async (HttpContext ctx, IAntiforgery anti) =>
+        {
+            if (!CanApprove(ctx.User)) return Results.Forbid(); var t=anti.GetAndStoreTokens(ctx).RequestToken!; await using var cn=Open(dbPath); await cn.OpenAsync(); var c=cn.CreateCommand(); c.CommandText="SELECT Id,OfficerKey,RequestedOnDuty,RequestedAt FROM OfficerDutyRequests WHERE Status='Pending' ORDER BY RequestedAt"; var rows=new List<string>(); await using var r=await c.ExecuteReaderAsync(); while(await r.ReadAsync()) rows.Add($"<tr><td>{H(r.GetString(1))}</td><td>{(r.GetInt32(2)==1?"On duty":"Off duty")}</td><td>{H(r.GetString(3))}</td><td><form method='post' action='/officer-status/approvals/{H(r.GetString(0))}'><input type='hidden' name='__RequestVerificationToken' value='{H(t)}'/><button name='decision' value='approve'>Approve</button><button name='decision' value='deny'>Deny</button></form></td></tr>"); return Html(Page("Duty approvals",$"<main class='wrap'><section class='page-head'><div><span class='eyebrow'>POLICE SUPERVISOR</span><h1>Duty requests</h1></div></section><section class='table-card'><table><thead><tr><th>Officer</th><th>Requested</th><th>Requested at</th><th>Decision</th></tr></thead><tbody>{(rows.Count>0?string.Join("",rows):"<tr><td colspan='4'>No pending requests.</td></tr>")}</tbody></table></section></main>"));
+        }).RequireAuthorization();
+
+        app.MapPost("/officer-status/approvals/{id:guid}", async (Guid id,HttpContext ctx,IAntiforgery anti) =>
+        {
+            if(!CanApprove(ctx.User)) return Results.Forbid(); await anti.ValidateRequestAsync(ctx); var f=await ctx.Request.ReadFormAsync(); var approve=f["decision"]=="approve"; var reviewer=OfficerKey(ctx.User); await using var cn=Open(dbPath); await cn.OpenAsync(); var c=cn.CreateCommand(); c.CommandText="SELECT OfficerKey,RequestedOnDuty FROM OfficerDutyRequests WHERE Id=$i AND Status='Pending'"; c.Parameters.AddWithValue("$i",id.ToString()); await using var r=await c.ExecuteReaderAsync(); if(!await r.ReadAsync()) return Results.NotFound(); var officer=r.GetString(0); var onDuty=r.GetInt32(1)==1; await r.DisposeAsync(); var now=Now(); using var tx=cn.BeginTransaction(); var u=cn.CreateCommand(); u.Transaction=tx; u.CommandText="UPDATE OfficerDutyRequests SET Status=$s,ReviewedAt=$t,ReviewedBy=$b WHERE Id=$i AND Status='Pending'"; u.Parameters.AddWithValue("$s",approve?"Approved":"Denied");u.Parameters.AddWithValue("$t",now);u.Parameters.AddWithValue("$b",reviewer);u.Parameters.AddWithValue("$i",id.ToString());await u.ExecuteNonQueryAsync(); if(approve){var d=cn.CreateCommand();d.Transaction=tx;d.CommandText="INSERT INTO OfficerDutyStatus(OfficerKey,OnDuty,OperationalStatus,UpdatedAt,UpdatedBy) VALUES($o,$d,$s,$t,$b) ON CONFLICT(OfficerKey) DO UPDATE SET OnDuty=$d,OperationalStatus=$s,UpdatedAt=$t,UpdatedBy=$b";d.Parameters.AddWithValue("$o",officer);d.Parameters.AddWithValue("$d",onDuty?1:0);d.Parameters.AddWithValue("$s",onDuty?"Available":DBNull.Value);d.Parameters.AddWithValue("$t",now);d.Parameters.AddWithValue("$b",reviewer);await d.ExecuteNonQueryAsync();} tx.Commit(); await Audit(dbPath,officer,approve?(onDuty?"On duty approved":"Off duty approved"):(onDuty?"On duty denied":"Off duty denied"),approve&&onDuty?"Available":null,reviewer,now); return Results.Redirect("/officer-status/approvals");
+        }).RequireAuthorization();
+
+        app.MapPost("/officer-status/operational", async (HttpContext ctx, IAntiforgery anti) =>
+        {
+            if(!CanPolice(ctx.User))return Results.Forbid();await anti.ValidateRequestAsync(ctx);var f=await ctx.Request.ReadFormAsync();var status=f["operationalStatus"].ToString();if(!OperationalStatuses.Contains(status))return Results.BadRequest();var officer=OfficerKey(ctx.User);var current=await Load(dbPath,officer);if(current?.OnDuty!=true)return Results.BadRequest("Officer must have an approved On Duty status.");var now=Now();await Exec(dbPath,"UPDATE OfficerDutyStatus SET OperationalStatus=$s,UpdatedAt=$t,UpdatedBy=$b WHERE OfficerKey=$o",("$s",status),("$t",now),("$b",officer),("$o",officer));await Audit(dbPath,officer,"On duty",status,officer,now);return Results.Redirect("/officer-status");
+        }).RequireAuthorization();
+
+        app.MapGet("/officer-status/roster", async (HttpContext ctx) => { if(!CanPolice(ctx.User))return Results.Forbid();await using var cn=Open(dbPath);await cn.OpenAsync();var c=cn.CreateCommand();c.CommandText="SELECT OfficerKey,OnDuty,COALESCE(OperationalStatus,''),UpdatedAt FROM OfficerDutyStatus ORDER BY OnDuty DESC,OperationalStatus,OfficerKey";var rows=new List<string>();await using var r=await c.ExecuteReaderAsync();while(await r.ReadAsync())rows.Add($"<tr><td>{H(r.GetString(0))}</td><td>{(r.GetInt32(1)==1?"On duty":"Off duty")}</td><td>{H(r.GetString(2))}</td><td>{H(r.GetString(3))}</td></tr>");return Html(Page("Officer roster",$"<main class='wrap'><section class='page-head'><div><span class='eyebrow'>POLICE · STATUS BOARD</span><h1>Officer status roster</h1></div></section><section class='table-card'><table><thead><tr><th>Officer</th><th>Duty</th><th>Status</th><th>Updated</th></tr></thead><tbody>{string.Join("",rows)}</tbody></table></section></main>"));}).RequireAuthorization();
+    }
+
+    private sealed record StatusRow(bool OnDuty,string? OperationalStatus,string UpdatedAt);
+    static async Task<StatusRow?> Load(string p,string o){await using var cn=Open(p);await cn.OpenAsync();var c=cn.CreateCommand();c.CommandText="SELECT OnDuty,OperationalStatus,UpdatedAt FROM OfficerDutyStatus WHERE OfficerKey=$o";c.Parameters.AddWithValue("$o",o);await using var r=await c.ExecuteReaderAsync();return await r.ReadAsync()?new(r.GetInt32(0)==1,r.IsDBNull(1)?null:r.GetString(1),r.GetString(2)):null;}
+    static async Task<string?> PendingForOfficer(string p,string o){await using var cn=Open(p);await cn.OpenAsync();var c=cn.CreateCommand();c.CommandText="SELECT RequestedOnDuty FROM OfficerDutyRequests WHERE OfficerKey=$o AND Status='Pending' ORDER BY RequestedAt DESC LIMIT 1";c.Parameters.AddWithValue("$o",o);var x=await c.ExecuteScalarAsync();return x is null?null:Convert.ToInt32(x)==1?"On duty — awaiting supervisor approval":"Off duty — awaiting supervisor approval";}
+    static async Task<string> History(string p,string o){await using var cn=Open(p);await cn.OpenAsync();var c=cn.CreateCommand();c.CommandText="SELECT DutyState,COALESCE(OperationalStatus,''),ChangedBy,ChangedAt FROM OfficerDutyStatusHistory WHERE OfficerKey=$o ORDER BY ChangedAt DESC LIMIT 50";c.Parameters.AddWithValue("$o",o);var rows=new List<string>();await using var r=await c.ExecuteReaderAsync();while(await r.ReadAsync())rows.Add($"<article><b>{H(r.GetString(0))}{(string.IsNullOrWhiteSpace(r.GetString(1))?"":" · "+H(r.GetString(1)))}</b><small>{H(r.GetString(2))} · {H(r.GetString(3))}</small></article>");return rows.Count==0?"<p>No status changes yet.</p>":string.Join("",rows);}
+    static async Task Audit(string p,string o,string d,string? s,string b,string t)=>await Exec(p,"INSERT INTO OfficerDutyStatusHistory(Id,OfficerKey,DutyState,OperationalStatus,ChangedBy,ChangedAt) VALUES($i,$o,$d,$s,$b,$t)",("$i",Guid.NewGuid()),("$o",o),("$d",d),("$s",s),("$b",b),("$t",t));
+    static void Ensure(string p){using var cn=Open(p);cn.Open();var c=cn.CreateCommand();c.CommandText="CREATE TABLE IF NOT EXISTS OfficerDutyStatus(OfficerKey TEXT PRIMARY KEY,OnDuty INTEGER NOT NULL,OperationalStatus TEXT,UpdatedAt TEXT NOT NULL,UpdatedBy TEXT NOT NULL);CREATE TABLE IF NOT EXISTS OfficerDutyRequests(Id TEXT PRIMARY KEY,OfficerKey TEXT NOT NULL,RequestedOnDuty INTEGER NOT NULL,Status TEXT NOT NULL,RequestedAt TEXT NOT NULL,ReviewedAt TEXT,ReviewedBy TEXT);CREATE TABLE IF NOT EXISTS OfficerDutyStatusHistory(Id TEXT PRIMARY KEY,OfficerKey TEXT NOT NULL,DutyState TEXT NOT NULL,OperationalStatus TEXT,ChangedBy TEXT NOT NULL,ChangedAt TEXT NOT NULL);CREATE INDEX IF NOT EXISTS IX_OfficerDutyRequests_Status ON OfficerDutyRequests(Status,RequestedAt);CREATE INDEX IF NOT EXISTS IX_OfficerDutyStatus_OnDuty ON OfficerDutyStatus(OnDuty,OperationalStatus);";c.ExecuteNonQuery();}
+    static bool CanPolice(ClaimsPrincipal u)=>u.IsInRole("Administrator")||u.IsInRole("Supervisor")||u.Claims.Any(c=>c.Type==DepartmentAccess.ClaimType&&string.Equals(c.Value,"Police",StringComparison.OrdinalIgnoreCase));
+    static bool CanApprove(ClaimsPrincipal u)=>u.IsInRole("Administrator")||u.IsInRole("Supervisor");
+    static string OfficerKey(ClaimsPrincipal u)=>u.FindFirstValue(ClaimTypes.Email)??u.Identity?.Name??"officer";
+    static SqliteConnection Open(string p)=>new($"Data Source={p}");static async Task Exec(string p,string sql,params(string,object?)[] ps){await using var cn=Open(p);await cn.OpenAsync();var c=cn.CreateCommand();c.CommandText=sql;foreach(var x in ps)c.Parameters.AddWithValue(x.Item1,x.Item2??DBNull.Value);await c.ExecuteNonQueryAsync();}
+    static string Now()=>DateTimeOffset.UtcNow.ToString("O");static string H(object? x)=>WebUtility.HtmlEncode(x?.ToString()??"");static IResult Html(string x)=>Results.Content(x,"text/html; charset=utf-8");static string Page(string t,string b)=>$"<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><title>{H(t)} · CLT++ Employee</title><link rel='stylesheet' href='/app.css'></head><body>{b}</body></html>";
+}

@@ -14,6 +14,8 @@ public sealed class BusinessAccount
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+// Public-safety database entity. BusinessAccountId and ResidentUserId are stable
+// cross-database references only; no database foreign keys cross the security boundary.
 public sealed class TowingRequest
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -46,6 +48,23 @@ public sealed class TowingRequest
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+public sealed class TowRelease
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid TowingRequestId { get; set; }
+    public Guid BusinessAccountId { get; set; }
+    public required string ResidentUserId { get; set; }
+    public required string AuthorizedBy { get; set; }
+    public required string ReleasedToName { get; set; }
+    public string? ReleasedToIdentificationType { get; set; }
+    public string? ReleasedToIdentificationLast4 { get; set; }
+    public string? AuthorizationReference { get; set; }
+    public string? PaymentDisposition { get; set; }
+    public string? Notes { get; set; }
+    public DateTimeOffset ReleasedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 public sealed record BusinessAccountInput(string LegalName,string? DbaName,string ContactName,string Email,string Phone,string Address,string? TowingPermitNumber);
 public sealed record TowingRequestInput(
     string RequestType,
@@ -68,3 +87,13 @@ public sealed record TowingRequestInput(
     string? BodyType,
     string? Color,
     bool DppaPurposeCertified);
+
+public sealed record TowReleaseInput(
+    string AuthorizedBy,
+    string ReleasedToName,
+    string? ReleasedToIdentificationType,
+    string? ReleasedToIdentificationLast4,
+    string? AuthorizationReference,
+    string? PaymentDisposition,
+    string? Notes,
+    DateTimeOffset? ReleasedAt);

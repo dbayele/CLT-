@@ -11,6 +11,7 @@ public sealed class ResidentDataContext : IdentityDbContext<ResidentUser>
     public DbSet<ResidentVehicle> ResidentVehicles => Set<ResidentVehicle>();
     public DbSet<BusinessAccount> BusinessAccounts => Set<BusinessAccount>();
     public DbSet<TowingRequest> TowingRequests => Set<TowingRequest>();
+    public DbSet<BusinessPermitApplication> BusinessPermitApplications => Set<BusinessPermitApplication>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -40,6 +41,17 @@ public sealed class ResidentDataContext : IdentityDbContext<ResidentUser>
             entity.Property(x => x.LicensePlate).HasMaxLength(20).IsRequired();
             entity.Property(x => x.PlateState).HasMaxLength(3).IsRequired();
             entity.Property(x => x.Vin).HasMaxLength(17).IsRequired();
+            entity.HasOne<BusinessAccount>().WithMany().HasForeignKey(x => x.BusinessAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ResidentUser>().WithMany().HasForeignKey(x => x.ResidentUserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        builder.Entity<BusinessPermitApplication>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.TrackingNumber).IsUnique();
+            entity.Property(x => x.PermitTypeId).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.PermitTitle).HasMaxLength(180).IsRequired();
+            entity.Property(x => x.Department).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
             entity.HasOne<BusinessAccount>().WithMany().HasForeignKey(x => x.BusinessAccountId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<ResidentUser>().WithMany().HasForeignKey(x => x.ResidentUserId).OnDelete(DeleteBehavior.Cascade);
         });

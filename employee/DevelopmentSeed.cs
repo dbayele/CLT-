@@ -38,9 +38,9 @@ public static class DevelopmentSeed
             Exec(cn, "INSERT OR IGNORE INTO PoliceCalls(Id,CallNumber,CallType,Priority,Location,LocationDetails,CallerName,CallerPhone,CallerEmail,CallerRelationship,AnonymousCaller,SafetyFlags,InitialNarrative,Status,AssignedTo,Disposition,ExpressReportId,CreatedBy,CreatedAt,UpdatedAt) VALUES($i,$n,$ct,$p,$l,'','Development Caller','+17045550100','citizen@example.test','Caller',0,'',$nr,$s,NULL,NULL,NULL,'dev.dispatch',$c,$u)",
                 ("$i",x.Id),("$n",x.Number),("$ct",x.Type),("$p",x.Priority),("$l",x.Location),("$nr",x.Narrative),("$s",x.Status),("$c",now.AddMinutes(-45).ToString("O")),("$u",now.AddMinutes(-10).ToString("O")));
 
-        Exec(cn, "INSERT OR IGNORE INTO PoliceCallOfficerAssignments(Id,PoliceCallId,OfficerKey,AssignmentStatus,AssignedBy,AssignedAt,UpdatedAt) VALUES($i,$c,$o,'Queued','dev.dispatch',$t,$t)",
+        Exec(cn, "INSERT OR IGNORE INTO PoliceCallOfficerAssignments(Id,PoliceCallId,OfficerKey,Status,AssignedBy,AssignedAt,UpdatedAt) VALUES($i,$c,$o,'Queued','dev.dispatch',$t,$t)",
             ("$i","30000000-0000-0000-0000-000000000001"),("$c",calls[0].Id),("$o","police.demo"),("$t",now.AddMinutes(-20).ToString("O")));
-        Exec(cn, "INSERT OR IGNORE INTO PoliceCallOfficerAssignments(Id,PoliceCallId,OfficerKey,AssignmentStatus,AssignedBy,AssignedAt,EnRouteAt,OnSceneAt,UpdatedAt) VALUES($i,$c,$o,'On scene','dev.dispatch',$a,$e,$s,$u)",
+        Exec(cn, "INSERT OR IGNORE INTO PoliceCallOfficerAssignments(Id,PoliceCallId,OfficerKey,Status,AssignedBy,AssignedAt,EnRouteAt,OnSceneAt,UpdatedAt) VALUES($i,$c,$o,'On scene','dev.dispatch',$a,$e,$s,$u)",
             ("$i","30000000-0000-0000-0000-000000000002"),("$c",calls[1].Id),("$o","police.demo"),("$a",now.AddMinutes(-35).ToString("O")),("$e",now.AddMinutes(-30).ToString("O")),("$s",now.AddMinutes(-20).ToString("O")),("$u",now.AddMinutes(-20).ToString("O")));
 
         Exec(cn, "INSERT OR IGNORE INTO PoliceCallHistory(Id,PoliceCallId,Actor,Action,Detail,OccurredAt) VALUES($i,$c,'dev.dispatch','Officer assigned','Assigned to police.demo',$t)",

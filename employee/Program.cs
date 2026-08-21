@@ -27,6 +27,7 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 TowZoneAdmin.Map(app);
+BoloAdmin.Map(app);
 
 var users = LoadUsers(app.Configuration, app.Environment);
 
@@ -89,10 +90,10 @@ app.MapGet("/", async (HttpContext ctx, RequestRepository repo, IAntiforgery ant
       <tr><td><a href="/requests/{U(r.TrackingNumber)}"><b>{H(r.TrackingNumber)}</b></a><small>{H(r.ServiceTitle)}</small></td><td>{H(DepartmentAccess.For(r))}</td><td>{H(r.Location)}</td><td><span class="status">{H(r.Status)}</span></td><td>{H(r.Processing?.AssignedTo ?? "Unassigned")}</td><td>{r.CreatedAt.LocalDateTime:g}</td></tr>
     """));
     var options = string.Join("", departments.Select(d => $"<option value='{H(d)}' {(string.Equals(d,department,StringComparison.OrdinalIgnoreCase)?"selected":"")}>{H(d)}</option>"));
-    var towAdmin = DepartmentAccess.UserDepartments(ctx.User).Contains("Police", StringComparer.OrdinalIgnoreCase) || ctx.User.IsInRole("Supervisor") || ctx.User.IsInRole("Administrator")
-        ? "<a class='button' href='/tow-zones'>Tow zones</a>" : "";
+    var policeTools = DepartmentAccess.UserDepartments(ctx.User).Contains("Police", StringComparer.OrdinalIgnoreCase) || ctx.User.IsInRole("Supervisor") || ctx.User.IsInRole("Administrator")
+        ? "<a class='button' href='/tow-zones'>Tow zones</a> <a class='button' href='/bolos'>BOLOs</a>" : "";
     var body = $"""
-      <main class="wrap"><section class="page-head"><div><span class="eyebrow">WORK QUEUE</span><h1>Service requests</h1><p>{list.Length} accessible request(s)</p>{towAdmin}</div>{Logout(token)}</section>
+      <main class="wrap"><section class="page-head"><div><span class="eyebrow">WORK QUEUE</span><h1>Service requests</h1><p>{list.Length} accessible request(s)</p>{policeTools}</div>{Logout(token)}</section>
       <div class="access-strip"><b>{H(ctx.User.Identity?.Name ?? "")}</b><span>{H(string.Join(" · ", DepartmentAccess.UserDepartments(ctx.User)))}</span><strong>{H(ctx.User.FindFirstValue(ClaimTypes.Role) ?? "Employee")}</strong></div>
       <form class="filters" method="get"><input name="q" value="{H(q ?? "")}" placeholder="Tracking number, service or address"/><select name="department"><option value="">All permitted departments</option>{options}</select><select name="status"><option value="">All statuses</option>{StatusOptions(status)}</select><button>Filter</button></form>
       <section class="table-card"><table><thead><tr><th>Request</th><th>Department</th><th>Location</th><th>Status</th><th>Assigned</th><th>Created</th></tr></thead><tbody>{(rows.Length>0?rows:"<tr><td colspan='6' class='empty'>No requests match this queue.</td></tr>")}</tbody></table></section></main>

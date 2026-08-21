@@ -49,6 +49,7 @@ OfficerDutyStatus.Map(app);
 PoliceCallAssignments.Map(app);
 PublicSafetyAlerts.Map(app);
 AnimalCareShelter.Map(app);
+DevelopmentSeed.Seed(app);
 
 var users = LoadUsers(app.Configuration, app.Environment);
 

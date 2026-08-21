@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import ResidentPortal from './ResidentPortal'
 import './styles.css'
+import './resident.css'
 
 const path=window.location.pathname.toLowerCase()
 const root=path.startsWith('/account')||path.startsWith('/my-district')

@@ -23,6 +23,16 @@ public sealed record CivicProfile(
     CivicPlace? FireStation,
     CivicPlace? DmvOffice,
     IReadOnlyList<CivicPlace> NearbySchools,
-    string SchoolAssignmentUrl);
+    string SchoolAssignmentUrl)
+{
+    public int? CongressionalDistrict { get; init; }
+    public int? StateHouseDistrict { get; init; }
+    public int? StateSenateDistrict { get; init; }
+    public IReadOnlyList<RepresentativeInfo> Representatives { get; init; } = Array.Empty<RepresentativeInfo>();
+    public CivicPlace? PostOffice { get; init; }
+    public IReadOnlyList<CivicPlace> Hospitals { get; init; } = Array.Empty<CivicPlace>();
+    public CivicPlace? EmergencyRoom { get; init; }
+}
 
 public sealed record CivicPlace(string Name, string Address, string? Phone, double? DistanceMiles, string? Website = null);
+public sealed record RepresentativeInfo(string Chamber, int? District, string Name, string Website, string? Phone);

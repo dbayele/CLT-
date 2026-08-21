@@ -48,3 +48,10 @@ export async function trackRequest(trackingNumber: string) {
   if (!response.ok) throw new Error(body.error ?? 'Request not found')
   return body
 }
+
+export async function createCheckout(trackingNumber: string): Promise<{ url: string; amount: number; currency: string; status: string }> {
+  const response = await fetch(`${API_BASE}/requests/${encodeURIComponent(trackingNumber)}/payments/checkout`, { method: 'POST' })
+  const body = await response.json()
+  if (!response.ok) throw new Error(body.error ?? body.detail ?? 'Unable to start payment')
+  return body
+}
